@@ -89,7 +89,7 @@ extern unsigned char RX_FIFO_data[0x2000]; //8kB
 // *** TDMA ***
 extern unsigned char TX_signaling_TDMA_frame[300]; 
 
-extern unsigned char is_TDMA_master;
+extern bool is_TDMA_master;
 extern unsigned char is_telnet_active;
 extern unsigned char is_telnet_routed;
 extern unsigned char CONF_radio_modulation;

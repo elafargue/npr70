@@ -549,7 +549,7 @@ int SI4463_read_temperature(SI4463_Chip* SI4463) {
 static int previous_temperature = 300;
 
 void SI4463_periodic_temperature_check(SI4463_Chip* SI4463) {
-	int need_recalibrate;
+	// int need_recalibrate;
 	int delta_temperature;
 	int i;
 	
@@ -561,14 +561,14 @@ void SI4463_periodic_temperature_check(SI4463_Chip* SI4463) {
 	delta_temperature = G_temperature_SI4463 - previous_temperature;
 	if ( ( delta_temperature > 14) || (delta_temperature < -14) ) {
 	//if (1) {
-		need_recalibrate = 1;
+		//  need_recalibrate = 1;
 		i = SI4463_configure_all();
 		previous_temperature = G_temperature_SI4463;
 		if (i == 0) {//fail to recalibrate
 			NVIC_SystemReset();
 		}
 	} else {
-		need_recalibrate = 0;
+		//  need_recalibrate = 0;
 	}
 	//RADIO_restart_if_necessary(0, need_recalibrate, 0); //0,need,0
 }
@@ -640,9 +640,7 @@ void SI4463_FIFO_RX_transfer(unsigned int size) {
 }
 
 void SI4463_FIFO_TX_transfer(unsigned int size) {
-	//unsigned char trash[150]; //static
 	unsigned char command[5];
-	int size_to_write;
 	G_SI4463->cs->write(0);
 	command[0] = 0x66;
 	G_SI4463->spi->transfer_2 (command, 1, SI_trash, 1);
@@ -720,7 +718,7 @@ void SI4463_RX_IT() {
 		if (Synth_SYNC_detected) {//Sync detected
 			RSSI = FRR[2];
 			RX_timer = timer_snapshot - CONF_long_preamble_duration_for_TA;
-			if ( (is_TDMA_master == 1) && (CONF_master_FDD == 2) ) {//Master UP
+			if ( (is_TDMA_master) && (CONF_master_FDD == 2) ) {//Master UP
 				RX_timer = RX_timer - TDMA_slave_last_master_top;
 			}
 			Treated_SYNC_detected = 1;
@@ -887,7 +885,7 @@ void SI4463_TX_to_RX_transition(void) {
 	RX_size_remaining = 0;
 	G_PTT_PA_pin->write(0);
 	G_SI4463->RX_TX_state = 1; // activate RX HW IRQ
-	if ( (is_TDMA_master == 0) && (CONF_radio_modulation == 24) ) {
+	if ( (!is_TDMA_master) && (CONF_radio_modulation == 24) ) {
 		SI4463_RX_timeout_call.attach_us(&SI4463_RX_timeout, 10*CONF_TDMA_frame_duration);
 	}
 	TX_in_progress = 0;
@@ -1220,7 +1218,7 @@ void RADIO_on(int need_disconnect, int need_radio_reconfigure, int HMI_output) {
 		if (HMI_output) { HMI_printf("reconfiguring done; starting radio\r\n"); }
 	}
 	if (need_disconnect == 1) {
-		if (is_TDMA_master == 1) {
+		if (is_TDMA_master) {
 			my_client_radio_connexion_state = 2;
 		} else {
 			my_client_radio_connexion_state = 1;
@@ -1239,7 +1237,7 @@ void RADIO_on(int need_disconnect, int need_radio_reconfigure, int HMI_output) {
 void RADIO_off(int need_disconnect) {
 	int toto;
 	CONF_radio_state_ON_OFF = 0;
-	if ( (is_TDMA_master == 0 ) && (need_disconnect == 1) ) {
+	if ( (!is_TDMA_master) && (need_disconnect == 1) ) {
 		my_client_radio_connexion_state = 1;
 		my_radio_client_ID = 0x7E;
 	}
@@ -1281,8 +1279,6 @@ void SI4432_TX_test(unsigned int req_duration) { //duration in ms
 	unsigned int timer_begin;
 	unsigned int timer_snapshot;
 	unsigned int real_duration;
-	unsigned char SI4463_state;
-	unsigned char loc_answer[8];
 	unsigned char trash[4];
 	
 	TX_test_inprogress = 1;
@@ -1312,7 +1308,7 @@ void SI4432_TX_test(unsigned int req_duration) { //duration in ms
 
 void SI4463_set_frequency(float freq_base, float freq_step) {
 	unsigned char radio_config[15] = {0x11, 0x40, 0x06, 0x00};
-	unsigned int step_size_temp, FC_int, FC_frac_int, i;
+	unsigned int step_size_temp, FC_int, FC_frac_int;
 	float FC_int_float, FC_frac_float;
 	
 	//FC_int_float = freq_base / 7.5;
@@ -1346,7 +1342,7 @@ void RADIO_compute_freq_params() {
 	float loc_freq_float_TX;
 	freq_local = FREQ_RANGE_MIN + ((float)CONF_frequency_HD)/1000;//unit MHz
 	freq_shift_loc = ((float)CONF_freq_shift)/1000;//unit MHz
-	if (is_TDMA_master == 1) {
+	if (is_TDMA_master) {
 		loc_freq_float_RX = freq_local + freq_shift_loc;
 		loc_freq_float_TX = freq_local;//downlink
 		if(CONF_master_FDD == 1) {//artificially disables RX for Master down

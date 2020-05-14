@@ -63,7 +63,7 @@ unsigned int TX_buff_ext_last_ready;
 
 unsigned char TX_TDMA_intern_data[384];
 
-unsigned char is_TDMA_master = 0; //truc
+bool is_TDMA_master = false; // Is the modem a master or a client
 unsigned char is_telnet_active = 1;
 unsigned char is_telnet_routed = 0;
 unsigned char CONF_radio_modulation;

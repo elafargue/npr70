@@ -48,7 +48,7 @@ void TDMA_init_all(void) {
 unsigned char TDMA_byte_elaboration(unsigned char synchro) {
 	unsigned char TDMA_byte;
 	unsigned long int uplink_buffer_size;
-	unsigned long int uplink_buffer_size_temp;
+	// unsigned long int uplink_buffer_size_temp;
 	if (is_TDMA_master) { // TDMA Master
 		TDMA_byte = 0x40;//uplink/downlink bit
 		TDMA_byte = TDMA_byte + (TDMA_frame_nb & 0x1F);
@@ -198,7 +198,7 @@ void TDMA_master_allocation () {
 	unsigned int loc_time_offset;
 	long int local_TA; 
 	unsigned int downlink_buffer_size;
-	unsigned int downlink_buffer_size_temp;
+	// unsigned int downlink_buffer_size_temp;
 	static unsigned char TDMA_alloc_frame_raw[150];
 	unsigned char rframe_length;
 	unsigned char loc_client_needs[radio_addr_table_size];
@@ -426,7 +426,7 @@ void TDMA_slave_alloc_exploitation(unsigned char* unFECdata, int unFECsize) {
 	int i;
 	unsigned char loc_client_ID;
 	unsigned char loc_TDMA_slot_length;
-	unsigned char loc_power;
+	// unsigned char loc_power;
 	unsigned long int loc_TDMA_offset;
 	i=2; //1st byte: client ID, 2nd byte:protocol
 	loc_client_ID = unFECdata[2];
@@ -440,7 +440,7 @@ void TDMA_slave_alloc_exploitation(unsigned char* unFECdata, int unFECsize) {
 			my_multiframe_ID = 0x0F & unFECdata[i+4];
 			my_multiframe_mask = (0xF0 & unFECdata[i+4]) >> 4;
 			my_multiframe_mask = LUT_multif_mask[my_multiframe_mask];
-			loc_power = ( 0xF0 & unFECdata[i+3] ) >> 4;
+			// loc_power = ( 0xF0 & unFECdata[i+3] ) >> 4;
 			//printf("TDMAf:");
 			//for (j=0; j< 5; j++) {
 			//	printf(" %02X", unFECdata[i+j]);

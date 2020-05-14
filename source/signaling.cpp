@@ -76,7 +76,7 @@ void signaling_frame_exploitation (unsigned char* unFECdata, int unFECsize, int 
 			case 0x06 : // ACK new connection
 				local_callsign = unFECdata + data_pos + 3;
 				local_callsign[15] = 0;
-				if ( (is_TDMA_master == 0) && (strcmp ((char*)local_callsign, CONF_radio_my_callsign) == 0) ) {
+				if ( (!is_TDMA_master) && (strcmp ((char*)local_callsign, CONF_radio_my_callsign) == 0) ) {
 					signaling_connect_ACK_process(unFECdata + data_pos + 2);
 				}
 				break;
@@ -84,7 +84,7 @@ void signaling_frame_exploitation (unsigned char* unFECdata, int unFECsize, int 
 				local_callsign = unFECdata + data_pos + 2;
 				local_callsign[15] = 0;
 				local_reason = unFECdata[data_pos + 18];
-				if ( (is_TDMA_master == 0) && (strcmp ((char*)local_callsign, CONF_radio_my_callsign) == 0) ) {
+				if ( (!is_TDMA_master) && (strcmp ((char*)local_callsign, CONF_radio_my_callsign) == 0) ) {
 					signaling_connect_NACK_process(local_reason);
 				}
 				break;
@@ -100,7 +100,7 @@ void signaling_frame_exploitation (unsigned char* unFECdata, int unFECsize, int 
 				local_ID = unFECdata[data_pos + 2];
 				local_callsign = unFECdata + data_pos + 3;
 				local_callsign[15] = 0;
-				if ( (is_TDMA_master == 0) && (strcmp ((char*)local_callsign, CONF_radio_my_callsign) == 0) ) {
+				if ( (!is_TDMA_master) && (strcmp ((char*)local_callsign, CONF_radio_my_callsign) == 0) ) {
 					signaling_disconnect_ACK_process (local_ID, local_callsign);
 				}
 				break;
@@ -119,7 +119,7 @@ void signaling_whois_interpret(unsigned char loc_ID, unsigned char* loc_callsign
 	IP_int2char (loc_IP_start, IP_start_c); 
 	//printf("WHOIS ID:%i CALL:%s IP_start %i.%i.%i.%i IP_size %i\r\n", loc_ID, (char*)loc_callsign, 
 	//	IP_start_c[0], IP_start_c[1], IP_start_c[2], IP_start_c[3], loc_IP_size);
-	if (is_TDMA_master == 0) { //only useful for slaves
+	if (!is_TDMA_master) { //only useful for slaves
 		if (loc_ID == 0x7F) { //who entry for master
 			strcpy (CONF_radio_master_callsign, (char*)loc_callsign);		
 		} 
@@ -529,7 +529,7 @@ void signaling_periodic_call() { // called every 2 to 6 seconds
 	unsigned int time_since_last_ack;
 	unsigned int timer_snapshot;
 	// CLIENT STATE MACHINE
-	if (is_TDMA_master == 0) {
+	if (!is_TDMA_master) {
 		if ( (my_client_radio_connexion_state==1) && (connect_state_machine_counter>2) ) {//waiting for connexion
 			signaling_connect_req_TX();
 			connect_state_machine_counter = 0;

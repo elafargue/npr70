@@ -255,6 +255,9 @@ int lookfor_free_LAN_IP (LAN_conf_T* LAN_config, unsigned char* client_MAC, unsi
 	return answer;
 }
 
+/**
+ * Runs the DHCP server routine that is regularly called from the main loop
+ */
 void DHCP_server(LAN_conf_T* LAN_config, W5500_chip* W5500 ) {
 	static unsigned char RX_data[600];//600
 	unsigned char client_MAC[7];
@@ -270,10 +273,10 @@ void DHCP_server(LAN_conf_T* LAN_config, W5500_chip* W5500 ) {
 	int loc_status;
 	
 	
-	RX_size = W5500_read_received_size(W5500, 3); 
+	RX_size = W5500_read_received_size(W5500, DHCP_SOCKET); 
 	if (RX_size>0) {
 		
-		size_UDP = W5500_read_UDP_pckt(W5500, 3, RX_data);
+		size_UDP = W5500_read_UDP_pckt(W5500, DHCP_SOCKET, RX_data, 0);
 		if (RX_data[8]==1) { // Valid DHCP request
 			
 			// *** DHCP request decoding ***
@@ -394,7 +397,7 @@ void DHCP_server(LAN_conf_T* LAN_config, W5500_chip* W5500 ) {
 				//index_opt_answer = index_opt_answer + 3;
 				DHCP_answer[index_opt_answer]=255;// end
 				index_opt_answer = index_opt_answer + 1;
-				W5500_write_TX_buffer(W5500, 3, DHCP_answer, index_opt_answer, 1);
+				W5500_write_TX_buffer(W5500, DHCP_SOCKET, DHCP_answer, index_opt_answer, 1);
 			}
 			
 			if ( (message_type_client == 3) && (loc_status !=0 ) )  { // request -> ack
@@ -447,7 +450,7 @@ void DHCP_server(LAN_conf_T* LAN_config, W5500_chip* W5500 ) {
 				//index_opt_answer = index_opt_answer + 3;
 				DHCP_answer[index_opt_answer]=255;// end
 				index_opt_answer = index_opt_answer + 1;
-				W5500_write_TX_buffer(W5500, 3, DHCP_answer, index_opt_answer, 1);
+				W5500_write_TX_buffer(W5500, DHCP_SOCKET, DHCP_answer, index_opt_answer, 1);
 			}
 			
 			if ( (message_type_client == 3) && (loc_status ==0 ) ) { //request -> NAK
@@ -459,7 +462,7 @@ void DHCP_server(LAN_conf_T* LAN_config, W5500_chip* W5500 ) {
 				index_opt_answer = index_opt_answer +3;
 				DHCP_answer[index_opt_answer]=255;// end
 				index_opt_answer = index_opt_answer + 1;
-				W5500_write_TX_buffer(W5500, 3, DHCP_answer, index_opt_answer, 1);
+				W5500_write_TX_buffer(W5500, DHCP_SOCKET, DHCP_answer, index_opt_answer, 1);
 			}
 			
 			if ( message_type_client == 7 ) { // DHCP RELEASE
@@ -521,7 +524,7 @@ void ARP_proxy (unsigned char* ARP_req_packet, int size) {
 	// determines if modem should reply or not 
 	if (ARP_requested_IP != LAN_conf_applied.LAN_modem_IP) { //only replies to non-modem IP
 	
-		if (is_TDMA_master == 1) { 
+		if (is_TDMA_master) { 
 		//TDMA Master (and FDD down) answers to all IP in radio range
 			if ( (ARP_requested_IP >= CONF_radio_IP_start) && (ARP_requested_IP < (CONF_radio_IP_start + CONF_radio_IP_size) ) ) {
 				answer_needed = 1;
@@ -557,7 +560,7 @@ void ARP_proxy (unsigned char* ARP_req_packet, int size) {
 		}
 		IP_int2char (ARP_client_IP, (ARP_answ_packet + 38) ); //ARP target IP
 		
-		W5500_write_TX_buffer(W5500_p1, 0, ARP_answ_packet, 42, 0);
+		W5500_write_TX_buffer(W5500_p1, RAW_SOCKET, ARP_answ_packet, 42, 0);
 	}
 }
 
@@ -584,7 +587,7 @@ void ARP_client_request (unsigned long int IP_requested) {
 		ARP_packet[i+32] = 0;
 	}
 	IP_int2char (IP_requested, (ARP_packet + 38) ); //ARP Target IP
-	W5500_write_TX_buffer(W5500_p1, 0, ARP_packet, 42, 0);
+	W5500_write_TX_buffer(W5500_p1, RAW_SOCKET, ARP_packet, 42, 0);
 }
 
 void ARP_client_answer_treatment (unsigned char* ARP_RX_packet, int size) {
@@ -683,7 +686,7 @@ int lookfor_MAC_from_IP (unsigned char* MAC_out, unsigned long int IP_addr) {
 	int i;
 	int i_found = 300;
 	unsigned int age_loc=0;
-	if ( (LAN_conf_applied.DHCP_server_active == 1) && (is_TDMA_master == 0) ) { //resolution for DHCP
+	if ( (LAN_conf_applied.DHCP_server_active == 1) && (!is_TDMA_master) ) { //resolution for DHCP
 		i_found = 300;
 		for (i=0; i<DHCP_ARP_tab_size; i++) {
 			if ( (DHCP_ARP_IP[i] == IP_addr) && (DHCP_ARP_status[i] == 2) ) {

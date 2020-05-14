@@ -119,7 +119,7 @@ void NFPR_config_read(AnalogIn* analog_pin) {
 		config_index = virt_EEPROM_write (raw_config_data, config_index);//save the MAC
 	}
 	apply_config_from_raw_string(raw_config_data);
-	if (is_TDMA_master == 1) {
+	if (is_TDMA_master) {
 		my_client_radio_connexion_state = 2;
 	} else {
 		my_client_radio_connexion_state = 1;
@@ -130,7 +130,7 @@ void NFPR_config_read(AnalogIn* analog_pin) {
 unsigned char NFPR_random_generator(AnalogIn* analog_pin) {
 	unsigned short interm_random;
 	unsigned char random_8;
-	int i, j;
+	int i;
 	random_8 = 0;
 	for (i=0; i<8; i++) {
 		interm_random = analog_pin->read_u16();
@@ -156,7 +156,7 @@ unsigned int NFPR_config_save(void) {
 void apply_config_from_raw_string(unsigned char* data_r) {
 	int i;
 	unsigned char modul_temp;
-	is_TDMA_master = data_r[4];
+	is_TDMA_master = (data_r[4] == 1);
 	for (i=0; i<16; i++) {
 		CONF_radio_my_callsign[i] = data_r[5+i];
 	}
@@ -218,10 +218,10 @@ void apply_config_from_raw_string(unsigned char* data_r) {
 		LAN_conf_applied.DHCP_range_size = CONF_radio_IP_size_requested;
 		
 	}
-	if ( (is_TDMA_master == 1) && (CONF_master_FDD == 1) ) { // FDD Master down
+	if ( (is_TDMA_master) && (CONF_master_FDD == 1) ) { // FDD Master down
 		G_FDD_trig_pin->output();
 	}
-	if ( (is_TDMA_master == 1) && (CONF_master_FDD == 2) ) {// FDD master up
+	if ( (is_TDMA_master) && (CONF_master_FDD == 2) ) {// FDD master up
 		G_FDD_trig_IRQ->rise(&TDMA_FDD_up_top_measure);
 	}
 }

@@ -52,7 +52,7 @@ void FDDup_RX_FIFO_dequeue(void) {
 			data_RX[i+5] = RX_FIFO_data[RX_FIFO_RD_point & RX_FIFO_mask];
 			RX_FIFO_RD_point++;
 		}
-		W5500_write_TX_buffer(W5500_p1, 4, data_RX, rframe_lgth+5, 0);
+		W5500_write_TX_buffer(W5500_p1, FDD_SOCKET, data_RX, rframe_lgth+5, 0);
 		timer_snapshot = GLOBAL_timer.read_us();
 		last_rframe_seen = timer_snapshot;
 		//debug_counter++;
@@ -229,7 +229,7 @@ void radio_RX_FIFO_dequeue (W5500_chip* W5500) {
 					//printf("sig fr received\r\n");
 					signaling_frame_exploitation (data_RX, size_wo_FEC, TA_local);
 				}
-				else if ( (protocol == 0x1F) && (is_TDMA_master == 0) ) {
+				else if ( (protocol == 0x1F) && (!is_TDMA_master) ) {
 					TDMA_slave_alloc_exploitation (data_RX, size_wo_FEC);
 				} 
 				else if (protocol == 0x00) {
@@ -409,7 +409,7 @@ void segment_and_push (unsigned char* data_unsegmented, int total_size, unsigned
 	unsigned char radio_pckt[360];
 #endif
 	int size_sent;
-	unsigned int rsize_needed;
+	//  unsigned int rsize_needed;
 	unsigned int timer_snapshot;
 	size_remaining = total_size;
 
@@ -419,7 +419,7 @@ void segment_and_push (unsigned char* data_unsegmented, int total_size, unsigned
 	
 	segment_counter = 0;
 	size_sent = 0;
-	rsize_needed = 100 + (total_size * 1.4);
+	//  rsize_needed = 100 + (total_size * 1.4);
 	if (total_size < 1510) {
 		if (TX_FIFO_full_global(1) == 0) {
 			G_uplink_bandwidth_temp = G_uplink_bandwidth_temp + total_size; 
@@ -742,7 +742,7 @@ void radio_save_RSSI_BER (unsigned char client_byte, unsigned char is_downlink, 
 		G_radio_addr_table_BER[client_ID] = (1250 * micro_BER) + (0.9 * G_radio_addr_table_BER[client_ID]);
 		
 	}
-	if ( (is_TDMA_master == 0) && (is_downlink) ) {
+	if ( (!is_TDMA_master) && (is_downlink) ) {
 		G_downlink_RSSI = (26 * RSSI_loc) + (0.9 * G_downlink_RSSI);
 		G_downlink_BER = (1250 * micro_BER) + (0.9 * G_downlink_BER);
 	}

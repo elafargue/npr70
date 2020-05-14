@@ -202,9 +202,11 @@ int main()
 	
 	int telnet_counter = 0;
 	
+	// There is no real time operating system on the modem, but rather an infinite loop "Arduino style"
+	// that runs the various functions of the modem.
 	while(1) {	
 		for (i=0; i<100; i++) {
-			if ( (is_TDMA_master == 1) && (CONF_master_FDD == 2) ) {
+			if ( (is_TDMA_master) && (CONF_master_FDD == 2) ) {
 				FDDup_RX_FIFO_dequeue();
 			} else {
 				radio_RX_FIFO_dequeue(W5500_p1);
@@ -271,7 +273,7 @@ int main()
 		}
 		serial_term_loop();
 		
-		if ( (LAN_conf_applied.DHCP_server_active == 1) && (is_TDMA_master == 0) ) {
+		if ( (LAN_conf_applied.DHCP_server_active == 1) && (!is_TDMA_master) ) {
 			DHCP_server(LAN_conf_p, W5500_p1);
 		}
 	}

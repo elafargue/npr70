@@ -444,8 +444,8 @@ int spi_master_block_write(spi_t *obj, const char *tx_buffer, int tx_length,
 // new function F4HDK
 int spi_master_transfer_2(spi_t *obj, const void *tx, size_t tx_length, void *rx, size_t rx_length)
 {
-    uint16_t size, ret;
-    int Rx = 0;
+    uint16_t ret;
+    // int Rx = 0;
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
 
@@ -456,7 +456,7 @@ int spi_master_transfer_2(spi_t *obj, const void *tx, size_t tx_length, void *rx
 	}
 	
     /*  Use 10ms timeout */
-    ret = HAL_SPI_TransmitReceive(handle,tx,rx,tx_length,3); //3
+    ret = HAL_SPI_TransmitReceive(handle,(uint8_t*)tx,(uint8_t*)rx,tx_length,3); //3
 
     //if(ret == HAL_OK) {
     //    return Rx;
@@ -464,7 +464,7 @@ int spi_master_transfer_2(spi_t *obj, const void *tx, size_t tx_length, void *rx
     //    DEBUG_PRINTF("SPI inst=0x%8X ERROR in write\r\n", (int)handle->Instance);
     //    return -1;
     //}
-	return 0;
+	return ret;
 }
 
 int spi_slave_receive(spi_t *obj)

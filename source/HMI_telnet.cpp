@@ -38,11 +38,15 @@ static int slow_counter = 0;
 
 static unsigned int telnet_last_activity;
 
+/**
+ * Called regularly by the main loop, and manages network events (new connection,
+ * data, etc)
+ */
 int telnet_loop (W5500_chip* W5500) {
 	static unsigned char previous_state = 0;
-	unsigned char RX_data[100];
-	unsigned char TX_data[100];
-	unsigned char current_state;
+	uint8_t RX_data[100];
+	uint8_t TX_data[100];
+	uint8_t current_state; // Socket state as returned by the W5500
 	unsigned int timer_snapshot;
 	char loc_char;
 	int RX_size = 0;
@@ -51,10 +55,10 @@ int telnet_loop (W5500_chip* W5500) {
 
 	result=0;
 	
-	current_state = W5500_read_byte(W5500, 0x0003, 0x05);
+	current_state = W5500_read_byte(W5500, W5500_Sn_SR, TELNET_SOCKET);
 	//printf("state: %x\r\n", current_state);
-	if ((current_state == 0x17) && (previous_state != 0x17)) {
-		W5500_read_long(W5500, 0x000C, 0x05, RX_data, 4);
+	if ((current_state == W5500_SOCK_ESTABLISHED) && (previous_state != W5500_SOCK_ESTABLISHED)) {
+		W5500_read_long(W5500, 0x000C, TELNET_SOCKET, RX_data, 4);
 		printf("\r\n\r\nnew telnet connexion from %i.%i.%i.%i\r\nserial inactive...\r\n", RX_data[0], RX_data[1], RX_data[2], RX_data[3]);
 		fflush(stdout);
 		//TX_data[0] = 0xFF; //IAC
@@ -73,7 +77,7 @@ int telnet_loop (W5500_chip* W5500) {
 		TX_data[8] = 0x03; //Suppr GA 
 		TX_data[9] = 0;
 		strcat((char*)TX_data, "NPR modem\r\nready> ");
-		W5500_write_TX_buffer (W5500, 1, TX_data, 27, 0); //27
+		W5500_write_TX_buffer (W5500, TELNET_SOCKET, TX_data, 27, 0); //27
 		//HMI_printf("ready>");
 		is_telnet_opened = 1;
 		current_rx_line_count = 0;
@@ -83,8 +87,8 @@ int telnet_loop (W5500_chip* W5500) {
 		telnet_last_activity = GLOBAL_timer.read_us();
 	}
 	
-	if (current_state==0x1C) { // close wait to close 
-		W5500_write_byte(W5500, 0x0001, 0x05, 0x10); 
+	if (current_state == W5500_SOCK_WAIT) { // close wait to close 
+		W5500_write_byte(W5500, W5500_Sn_CR, TELNET_SOCKET, 0x10); 
 		printf("telnet connexion closed\r\nready> "); 
 		fflush(stdout);
 		is_telnet_opened = 0;
@@ -94,23 +98,23 @@ int telnet_loop (W5500_chip* W5500) {
 		display_who_ongoing = 0;
 	}
 	
-	if (current_state==0x00) { //closed to open
-		W5500_write_byte(W5500, 0x0001, 0x05, 0x01); 
+	if (current_state == W5500_SOCK_CLOSED) { //closed to open
+		W5500_write_byte(W5500, W5500_Sn_CR, TELNET_SOCKET, 0x01); 
 		//printf("open \r\n");
 		result=1;
 	}
 	
-	if (current_state==0x13) { //opened to listen
-		W5500_write_byte(W5500, 0x0001, 0x05, 0x02); 
+	if (current_state == W5500_SOCK_INIT) { //opened to listen
+		W5500_write_byte(W5500, W5500_Sn_CR, TELNET_SOCKET, 0x02); 
 		//printf("listen \r\n");
 	}
 	previous_state = current_state;
 	if (is_telnet_opened) {
-		RX_size = W5500_read_received_size(W5500, 1); 
+		RX_size = W5500_read_received_size(W5500, TELNET_SOCKET); 
 		timer_snapshot = GLOBAL_timer.read_us();
 		if ((timer_snapshot - telnet_last_activity) > 300000000) { //300000000
 			//HMI_printf("Telnet inactivity timeout. Force exit.\r\n");
-			W5500_write_byte(W5500_p1, 0x0001, 0x05, 0x08); //close TCP
+			W5500_write_byte(W5500_p1, 0x0001, TELNET_SOCKET, 0x08); //close TCP
 			is_telnet_opened = 0;
 			echo_ON = 1;
 			display_status_ongoing = 0;
@@ -123,7 +127,7 @@ int telnet_loop (W5500_chip* W5500) {
 	if (RX_size > 0) {
 		telnet_last_activity = GLOBAL_timer.read_us();
 		result=1;
-		W5500_read_RX_buffer(W5500, 1, RX_data, RX_size);
+		W5500_read_RX_buffer(W5500, TELNET_SOCKET, RX_data, RX_size);
 		RX_data[RX_size] = 0;
 		i = 0;
 		j = 0;
@@ -166,7 +170,7 @@ int telnet_loop (W5500_chip* W5500) {
 					j = j + 2;
 					current_rx_line[current_rx_line_count] = 0;//null termination
 					current_rx_line_count++;
-					W5500_write_TX_buffer (W5500, 1, TX_data, j, 0);
+					W5500_write_TX_buffer (W5500, TELNET_SOCKET, TX_data, j, 0);
 					j = 0;
 					HMI_line_parse (current_rx_line, current_rx_line_count);
 					current_rx_line_count = 0;
@@ -181,7 +185,7 @@ int telnet_loop (W5500_chip* W5500) {
 			}
 		}
 		if (j > 0) {
-			W5500_write_TX_buffer (W5500, 1, TX_data, j, 0);
+			W5500_write_TX_buffer (W5500, TELNET_SOCKET, TX_data, j, 0);
 		}
 		//printf("\r\n");
 	}
@@ -372,7 +376,7 @@ void HMI_TX_test(char* duration_txt) {
 		
 		wait_ms(10);
 		CONF_radio_state_ON_OFF = 0;
-		if (is_TDMA_master == 0 ) {
+		if (!is_TDMA_master) {
 			my_client_radio_connexion_state = 1;
 			my_radio_client_ID = 0x7E;
 		}
@@ -390,7 +394,7 @@ void HMI_TX_test(char* duration_txt) {
 
 void HMI_reboot(void) {
 	if (is_telnet_opened == 1) {
-		W5500_write_byte(W5500_p1, 0x0001, 0x05, 0x08);
+		W5500_write_byte(W5500_p1, 0x0001, TELNET_SOCKET, 0x08);
 	}
 	//extern "C" void mbed_reset();
 	NVIC_SystemReset();
@@ -402,7 +406,7 @@ void HMI_force_exit(void) {
 		IP_int2char (LAN_conf_applied.LAN_modem_IP, IP_loc);
 		//HMI_printf("\r\n\r\n\r\nNew IP config... force telnet exit.\r\n");
 		//HMI_printf("\r\n\r\nNew IP config. Open new telnet session with: %i.%i.%i.%i\r\n\r\n", IP_loc[0], IP_loc[1], IP_loc[2], IP_loc[3]);
-		W5500_write_byte(W5500_p1, 0x0001, 0x05, 0x08); //close TCP
+		W5500_write_byte(W5500_p1, 0x0001, TELNET_SOCKET, 0x08); //close TCP
 		is_telnet_opened = 0;
 		echo_ON = 1;
 		display_status_ongoing = 0;
@@ -413,7 +417,7 @@ void HMI_force_exit(void) {
 
 void HMI_exit(void) {
 	if (is_telnet_opened == 1) {
-		W5500_write_byte(W5500_p1, 0x0001, 0x05, 0x08); //close TCP
+		W5500_write_byte(W5500_p1, 0x0001, TELNET_SOCKET, 0x08); //close TCP
 		is_telnet_opened = 0;
 		echo_ON = 1;
 		display_status_ongoing = 0;
@@ -426,7 +430,7 @@ void HMI_exit(void) {
 }
 
 static char HMI_yes_no[2][4]={'n','o',0,0, 'y','e','s',0};
-static char HMI_trans_modes[2][4]={'I','P',0,0,'E','t','h',0};
+// static char HMI_trans_modes[2][4]={'I','P',0,0,'E','t','h',0};
 static char HMI_master_FDD[3][5]={'n','o',0,0,0,'d','o','w','n',0,'u','p',0,0,0};
 
 void HMI_display_config(void) {
@@ -442,12 +446,12 @@ void HMI_display_config(void) {
 	IP_int2char (LAN_conf_saved.LAN_subnet_mask, IP_loc+4);
 	HMI_printf("  modem_IP: %i.%i.%i.%i\r\n  netmask: %i.%i.%i.%i\r\n", IP_loc[0], IP_loc[1],IP_loc[2],IP_loc[3],IP_loc[4],IP_loc[5],IP_loc[6],IP_loc[7]);
 	
-	if (is_TDMA_master == 1) {
+	if (is_TDMA_master) {
 		HMI_printf("  master_FDD: %s\r\n", HMI_master_FDD[CONF_master_FDD]);
 	}
 	
 	
-	if ( (is_TDMA_master == 1) && ( CONF_master_FDD < 2 ) && (CONF_transmission_method==0) ) {//Master FDD down (or no FDD)	
+	if ( (is_TDMA_master) && ( CONF_master_FDD < 2 ) && (CONF_transmission_method==0) ) {//Master FDD down (or no FDD)	
 		IP_int2char (CONF_radio_IP_start, IP_loc);
 		IP_int2char (CONF_radio_IP_start+CONF_radio_IP_size-1, IP_loc+4);
 		HMI_printf("  IP_begin: %i.%i.%i.%i\r\n  master_IP_size: %ld (Last IP: %i.%i.%i.%i)\r\n", IP_loc[0], IP_loc[1],IP_loc[2],IP_loc[3],CONF_radio_IP_size, IP_loc[4],IP_loc[5],IP_loc[6],IP_loc[7]);
@@ -456,11 +460,11 @@ void HMI_display_config(void) {
 		IP_int2char (LAN_conf_saved.LAN_DNS_value, IP_loc);
 		HMI_printf("  DNS_active: %s\r\n  DNS_value: %i.%i.%i.%i\r\n", HMI_yes_no[LAN_conf_saved.LAN_DNS_activ], IP_loc[0],IP_loc[1],IP_loc[2],IP_loc[3]);
 	}
-	if ( (is_TDMA_master == 1) && (CONF_master_FDD == 2) ) {//Master FDD up
+	if ( (is_TDMA_master) && (CONF_master_FDD == 2) ) {//Master FDD up
 		IP_int2char (CONF_master_down_IP, IP_loc);
 		HMI_printf("  master_down_IP: %i.%i.%i.%i\r\n",IP_loc[0],IP_loc[1],IP_loc[2],IP_loc[3]);
 	}
-	if (is_TDMA_master == 0) {//client
+	if (!is_TDMA_master) {//client
 		IP_int2char (CONF_radio_IP_start, IP_loc);
 		HMI_printf("  IP_begin: %i.%i.%i.%i\r\n", IP_loc[0], IP_loc[1],IP_loc[2],IP_loc[3]);
 		HMI_printf("  client_req_size: %ld\r\n  DHCP_active: %s\r\n", CONF_radio_IP_size_requested, HMI_yes_no[LAN_conf_saved.DHCP_server_active]);
@@ -477,7 +481,7 @@ void HMI_set_command(char* loc_param1, char* loc_param2) {
 	unsigned char temp_uchar;
 	unsigned long int temp_uint;
 	float frequency;
-	unsigned char previous_freq_band;
+	// unsigned char previous_freq_band;
 	char DHCP_warning[50];
 	if ((loc_param1) && (loc_param2)) {
 		if (strcmp(loc_param1, "callsign") == 0) {
@@ -493,7 +497,7 @@ void HMI_set_command(char* loc_param1, char* loc_param2) {
 			temp_uchar = HMI_yes_no_2int(loc_param2);
 			if ( (temp_uchar==0) || (temp_uchar==1) ) {
 				RADIO_off_if_necessary(1);
-				is_TDMA_master = temp_uchar;
+				is_TDMA_master = (temp_uchar == 1);
 				RADIO_restart_if_necessary(1, 0, 1);
 				if ( (is_TDMA_master) && (LAN_conf_saved.DHCP_server_active == 1) ) {
 					strcpy (DHCP_warning, " (warning, DHCP inhibited in master mode)"); 
@@ -880,13 +884,13 @@ void HMI_print_status(void) {
 		HMI_printf("%s   %i status: %s TA:%.1fkm Temp:%idegC   \r\n", temp_string, slow_counter, text_radio_status[my_client_radio_connexion_state-1], 0.15*(float)TA_loc, G_temperature_SI4463);
 	}
 	//HMI_printf("   TX buff filling %i\r\n", (TX_buff_ext_WR_pointer - TX_buff_ext_RD_pointer)*128);//!!!test
-	if ( (is_TDMA_master == 1) && (CONF_master_FDD == 2) ) {
+	if ( (is_TDMA_master) && (CONF_master_FDD == 2) ) {
 		HMI_printf("   RX tops from master FDD down %i\r\n", RX_top_FDD_up_counter);
 	} else {
 		HMI_printf("   RX_Eth_IPv4 %i ;TX_radio_IPv4 %i ; RX_radio_IPv4 %i   \r\n", RX_Eth_IPv4_counter, TX_radio_IPv4_counter, RX_radio_IPv4_counter);
 		//HMI_printf("   RX_Eth_IPv4 %i ;TX_radio_IPv4 %i ; RX_radio_IPv4 %i   \r\n", RX_Eth_IPv4_counter, TX_radio_IPv4_counter, (TX_buff_ext_WR_pointer - TX_buff_ext_RD_pointer)*128);//!!!! debug FIFO filling
 	}
-	if ( (is_TDMA_master == 0) && (RSSI_stat_pkt_nb > 0) ) {
+	if ( (!is_TDMA_master) && (RSSI_stat_pkt_nb > 0) ) {
 		//HMI_printf("RSSI: %i\r\nCTRL+c to exit...\r\n", (RSSI_total_stat / RSSI_stat_pkt_nb) );
 		HMI_printf("   DOWNLINK - bandwidth:%.1f RSSI:%.1f ERR:%.2f%%    \r\n", loc_downlink_bw, ((float)G_downlink_RSSI/256/2-136), ((float)G_downlink_BER)/500); // /500
 		RSSI_total_stat = 0;
@@ -895,7 +899,7 @@ void HMI_print_status(void) {
 		HMI_printf("   DOWNLINK - bandwidth: %.1f RSSI:       ERR:      \r\n", loc_downlink_bw);
 		
 	}
-	if ( (is_TDMA_master == 0) && (my_client_radio_connexion_state == 2) ) {
+	if ( (!is_TDMA_master) && (my_client_radio_connexion_state == 2) ) {
 		HMI_printf("   UPLINK -   bandwidth:%.1f RSSI:%.1f ERR:%.2f%%    \r\nCTRL+c to exit...\r\n", loc_uplink_bw, ((float)G_radio_addr_table_RSSI[my_radio_client_ID]/2-136), ((float)G_radio_addr_table_BER[my_radio_client_ID])/500);
 	} else {
 		HMI_printf("   UPLINK -   bandwidth:%.1f RSSI:     ERR:      \r\nCTRL+c to exit...\r\n", loc_uplink_bw);
@@ -919,7 +923,7 @@ void HMI_printf_detail (void) {
 	int size;
 	if (is_telnet_opened) {
 		size = strlen (HMI_out_str);
-		W5500_write_TX_buffer (W5500_p1, 1, (unsigned char*)HMI_out_str, size, 0);
+		W5500_write_TX_buffer (W5500_p1, TELNET_SOCKET, (unsigned char*)HMI_out_str, size, 0);
 	}
 	else {
 		printf("%s", HMI_out_str);

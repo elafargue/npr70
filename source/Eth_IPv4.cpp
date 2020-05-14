@@ -60,15 +60,14 @@ int Eth_RX_dequeue (W5500_chip* W5500) {
 	
 	int RX_size=0;
 	int mac_size=0;
-	int i;
 	//int match_RTP = 1;
 	unsigned int ethertype;
 	if (*(W5500->interrupt)==0) {
-		W5500_write_byte(W5500, 0x0002, 1, 0xFF);//ack interrupt
+		W5500_write_byte(W5500, 0x0002, RAW_SOCKET, 0xFF);//ack interrupt
 		more_to_read=1;
 	}
 	if ((more_to_read == 1))  { 
-		RX_size = W5500_read_received_size(W5500, 0); 
+		RX_size = W5500_read_received_size(W5500, RAW_SOCKET); 
 		//if (RX_size > DEBUG_max_rx_size_w5500) {//!!!
 		//	DEBUG_max_rx_size_w5500 = RX_size;//!!!
 		//	printf("max buffer:%i\r\n", DEBUG_max_rx_size_w5500);//!!!
@@ -76,7 +75,7 @@ int Eth_RX_dequeue (W5500_chip* W5500) {
 		if (RX_size > 0) {
 			answer=1;
 
-			mac_size = W5500_read_MAC_pckt(W5500, 0, RX_data);
+			mac_size = W5500_read_MAC_pckt(W5500, RAW_SOCKET, RX_data);
 			if (RX_size > mac_size) {
 				more_to_read = 1;
 			} else {
@@ -94,14 +93,14 @@ int Eth_RX_dequeue (W5500_chip* W5500) {
 			//}
 			// FOR FUTURE VIRTUAL CHANNEL 
 			//if (match_RTP==1) {
-			//	W5500_write_TX_buffer(W5500, 2, RX_data+44, mac_size-44, 0);
+			//	W5500_write_TX_buffer(W5500, RTP_SOCKET, RX_data+44, mac_size-44, 0);
 			//} 
 			
 			ethertype = RX_data[14]*0x100 + RX_data[15];
 			
 			if (ethertype == 0x0806) { //ARP packet received
 				//printf("ARP packet received!\r\n");
-				if ((is_TDMA_master == 0)||(CONF_master_FDD<2)) {
+				if ((!is_TDMA_master)||(CONF_master_FDD<2)) {
 					ARP_RX_packet_treatment (RX_data+2, mac_size-2);
 				}
 			}
@@ -110,7 +109,7 @@ int Eth_RX_dequeue (W5500_chip* W5500) {
 				RX_port = 0;
 				RX_proto = 0;
 				RX_dest_IP = 0;
-				if ( (is_TDMA_master==1) && (CONF_master_FDD == 1) ) {//master down
+				if ( (is_TDMA_master) && (CONF_master_FDD == 1) ) {//master down
 					//RX_Eth_pckt = RX_data+2;
 					RX_port = (RX_data[38] << 8) + RX_data[39];
 					RX_proto = RX_data[25];//11 for UDP
@@ -137,12 +136,12 @@ void Eth_pause_frame_TX(unsigned int time) {
 	unsigned char pause_frame[70] = {
 		0x01, 0x80, 0xC2, 0x00, 0x00, 0x01,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x88, 0x08, 0x00, 0x01, 0x4E, 0x70,/* 0x17, 0x70 */
+		0x88, 0x08, 0x00, 0x01, 0x4E, 0x70,    /* 0x17, 0x70 */
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 	for (i=0; i<6; i++) {
 		pause_frame[i+6] = CONF_modem_MAC[i];
 	}
-	W5500_write_TX_buffer(W5500_p1, 0, pause_frame, 60, 0); 
+	W5500_write_TX_buffer(W5500_p1, RAW_SOCKET, pause_frame, 60, 0); 
 }
 
 void IPv4_to_radio (unsigned char* RX_Eth_frame, int size) {
@@ -162,7 +161,7 @@ void IPv4_to_radio (unsigned char* RX_Eth_frame, int size) {
 	if (MAC_dest_match == 1) {//we only take frame with destination = modem_MAC, not broadcast or multicast
 		dest_IP_addr = IP_char2int(RX_Eth_frame+30); 
 		
-		if ( (is_TDMA_master == 1) && (dest_IP_addr != LAN_conf_applied.LAN_modem_IP) ) { // TDMA Master
+		if ( (is_TDMA_master) && (dest_IP_addr != LAN_conf_applied.LAN_modem_IP) ) { // TDMA Master
 			if ( (dest_IP_addr >= CONF_radio_IP_start) && (dest_IP_addr < (CONF_radio_IP_start + CONF_radio_IP_size) ) ) {
 				loc_client_ID = lookfor_client_ID_from_IP (dest_IP_addr); 
 				//printf ("IP %X is client %i\r\n", dest_IP_addr, loc_client_ID);
@@ -172,7 +171,7 @@ void IPv4_to_radio (unsigned char* RX_Eth_frame, int size) {
 				}
 			}
 		}
-		if ( (is_TDMA_master == 0) && (dest_IP_addr != LAN_conf_applied.LAN_modem_IP) ) { // TDMA Client
+		if ( (!is_TDMA_master) && (dest_IP_addr != LAN_conf_applied.LAN_modem_IP) ) { // TDMA Client
 			if ( (dest_IP_addr & LAN_conf_applied.LAN_subnet_mask) == (LAN_conf_applied.LAN_modem_IP & LAN_conf_applied.LAN_subnet_mask) ) {
 				is_inside_subnet = 1;
 			}
@@ -217,7 +216,7 @@ void IPv4_from_radio (unsigned char* RX_eth_frame, int RX_size) { //Rx size incl
 	//printf("size IPv4 : %i\r\n", local_size);
 	
 	//printf (" IPv4 radio RX\r\n");
-	if (is_TDMA_master == 1) { // TDMA Master
+	if (is_TDMA_master) { // TDMA Master
 		if ( (dest_IP_addr & LAN_conf_applied.LAN_subnet_mask) == (LAN_conf_applied.LAN_modem_IP & LAN_conf_applied.LAN_subnet_mask) ) {
 			is_inside_subnet = 1;
 		}
@@ -243,7 +242,7 @@ void IPv4_from_radio (unsigned char* RX_eth_frame, int RX_size) { //Rx size incl
 			}
 		}
 	}
-	if (is_TDMA_master == 0) { // TDMA client
+	if (!is_TDMA_master) { // TDMA client
 		// Checks if dest IP is inside local range
 		if ( (dest_IP_addr >= LAN_conf_applied.DHCP_range_start) && (dest_IP_addr < (LAN_conf_applied.DHCP_range_start + LAN_conf_applied.DHCP_range_size)) ) { 
 			eth_TX_need = 1;
@@ -260,7 +259,7 @@ void IPv4_from_radio (unsigned char* RX_eth_frame, int RX_size) { //Rx size incl
 		RX_eth_frame[13] = 0x00; 
 		dest_MAC_found = lookfor_MAC_from_IP (RX_eth_frame, LAN_dest_IP);
 		if (dest_MAC_found) {		
-			W5500_write_TX_buffer(W5500_p1, 0, RX_eth_frame, local_size + 14, 0); 
+			W5500_write_TX_buffer(W5500_p1, RAW_SOCKET, RX_eth_frame, local_size + 14, 0); 
 			//RX_radio_IPv4_counter++;
 		}
 		else {
@@ -280,7 +279,7 @@ void flush_temp_Eth_buffer(unsigned long int loc_IP) {
 	if (temp_Eth_buff_size > 0) {
 		if (loc_IP == temp_Eth_buff_IP) {
 			lookfor_MAC_from_IP (temp_Eth_buffer, loc_IP); //puts MAC inside Eth
-			W5500_write_TX_buffer(W5500_p1, 0, temp_Eth_buffer, temp_Eth_buff_size, 0); 
+			W5500_write_TX_buffer(W5500_p1, RAW_SOCKET, temp_Eth_buffer, temp_Eth_buff_size, 0); 
 			//RX_radio_IPv4_counter++;
 		}
 		temp_Eth_buff_size = 0;
