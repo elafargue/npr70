@@ -21,7 +21,7 @@
 #include "Eth_IPv4.h"
 
 /**
- * Reads 4 bytes starting at W5500_addr inside of block bloc_addr
+ * Reads more than 2 bytes starting at W5500_addr inside of block bloc_addr
  */
 void W5500_read_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, unsigned char* RX_data, int RX_size)
 {
@@ -44,6 +44,9 @@ void W5500_read_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned ch
 	wait_us(2);
 }
 
+/**
+ * Write a large amount of data
+ */
 void W5500_write_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, unsigned char* TX_data, int TX_size) {
     unsigned char W5_command[4];
 	static unsigned char trash[1600];
@@ -78,6 +81,9 @@ void W5500_read_short(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned c
 	wait_us(2);
 }
 
+/**
+ * Write a small amount of data (up to 7 bytes)
+ */
 void W5500_write_short(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, unsigned char* TX_data_ext, int TX_size) {
     unsigned char TX_data_loc[10];
 	unsigned char trash[10];
@@ -189,7 +195,7 @@ uint32_t W5500_read_UDP_pckt (W5500_chip* SPI_p_loc, uint8_t sock_nb, uint8_t* d
 	uint8_t W5_command[20];
 	W5500_read_short(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw);
 	read_pointer = (read_pointer_raw[0] << 8) + read_pointer_raw[1];
-	// read first 8 bytes
+	// Read first 8 bytes ( IP address (4), Port (2), Packet size (2))
 	W5_command[0] = read_pointer_raw[0];
 	W5_command[1] = read_pointer_raw[1];
 	W5_command[2] = (sock_nb+2) * 0x08;
@@ -197,6 +203,8 @@ uint32_t W5500_read_UDP_pckt (W5500_chip* SPI_p_loc, uint8_t sock_nb, uint8_t* d
 	SPI_p_loc->spi_port->transfer_2 (W5_command, 3, trash, 3);
 	SPI_p_loc->spi_port->transfer_2 (trash, 8, data, 8);
 	size = data [7] + 256 * data[6];
+	// BEWARE:n I don't get how this does not blow stuff up, sicne the size of `trash`
+	// can be way below `size`
 	SPI_p_loc->spi_port->transfer_2 (trash, size, data+8, size);
 	
 	size = size + 8;
@@ -430,7 +438,15 @@ void W5500_initial_configure(W5500_chip* SPI_p_loc) {
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, FDD_SOCKET, 0x01); // open
 	IP_int2char (CONF_master_down_IP, data);
 	W5500_write_short(SPI_p_loc, W5500_Sn_DIPR0, FDD_SOCKET, data, 4);
-	// Socket 5
+
+	// Socket 5 SNMP Agent
+	W5500_write_byte(SPI_p_loc, W5500_Sn_MR, SNMP_SOCKET, 0x02); //config
+	wait_ms(10);
+	data[0]=0x00; //port 161
+    data[1]=0xa1;
+	W5500_write_short(SPI_p_loc, W5500_Sn_PORT0, SNMP_SOCKET, data, 2); //port rx 161
+	// W5500_write_short(SPI_p_loc, W5500_Sn_DPORT0, SNMP_SOCKET, data, 2); //port tx 161
+	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, SNMP_SOCKET, 0x01); // Open the socket
 	
 	// Socket 6
 	

@@ -19,6 +19,7 @@
 #include "W5500.h"
 #include "SI4463.h"
 #include "HMI_telnet.h"
+#include "SNMP.h"
 //#include "Virt_Chan.h"
 #include "Eth_IPv4.h"
 #include "DHCP_ARP.h"
@@ -272,6 +273,8 @@ int main()
 			}
 		}
 		serial_term_loop();
+
+		snmp_loop(W5500_p1);
 		
 		if ( (LAN_conf_applied.DHCP_server_active == 1) && (!is_TDMA_master) ) {
 			DHCP_server(LAN_conf_p, W5500_p1);

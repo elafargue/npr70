@@ -22,54 +22,56 @@
 #include "HMI_telnet.h"
 #include "TDMA.h"
 
-static unsigned char raw_config_data[260];
+static npr_config raw_config_data; // 256 bytes long
 static unsigned int config_index;
 
-unsigned int virt_EEPROM_read(unsigned char* out_data) { //reads 256 Bytes of virtual eeprom data
+// Flash storage is organized in 16 banks of 256 bytes
+#define FLASH_SETTINGS_SIZE 256
+#define FLASH_BANKS      16
+
+unsigned int virt_EEPROM_read(npr_config* out_data) { //reads 256 Bytes of virtual eeprom data
 	FlashIAP my_loc_flash;
-	unsigned char loc_index_char[6];
-	unsigned int loc_index_int, highest_index_seen;
+	uint32_t loc_index_int, highest_index_seen;
 	unsigned int loc_address;
+	uint32_t magic = 0;
 	int i; 
 	my_loc_flash.init();
 	highest_index_seen = 0;
-	//for (i=0; i<256; i++) {
-	for (i=0; i<64; i++) {
-		my_loc_flash.read(loc_index_char, NFPR_config_addr_begin+(i*256), 4);
-		loc_index_int = (loc_index_char[0] << 24) + (loc_index_char[1] << 16) + (loc_index_char[2] << 8) + loc_index_char[3];
-		if ( (loc_index_int != 0xFFFFFFFF) && (loc_index_int > highest_index_seen) ) {
-			highest_index_seen = loc_index_int;
+	for (i=0; i< FLASH_BANKS; i++) {
+		my_loc_flash.read(&magic, NFPR_config_addr_begin+(i*FLASH_SETTINGS_SIZE), 4);
+		if (magic == CONFIG_MAGIC) { // Valid start of config
+			my_loc_flash.read(&loc_index_int, NFPR_config_addr_begin+(i*FLASH_SETTINGS_SIZE) + 4, 4);
+			if ( (loc_index_int != 0xFFFFFFFF) && (loc_index_int > highest_index_seen) ) {
+				highest_index_seen = loc_index_int;
+			}
 		}
 	}
 	if (highest_index_seen != 0) { //valid entry found
-		//loc_address = NFPR_config_addr_begin + (highest_index_seen & 0xFF)*256;
-		loc_address = NFPR_config_addr_begin + (highest_index_seen & 0x3F)*256;
-		my_loc_flash.read(out_data, loc_address, 256);
+		loc_address = NFPR_config_addr_begin + (highest_index_seen % FLASH_BANKS )*FLASH_SETTINGS_SIZE;
+		my_loc_flash.read(out_data, loc_address, FLASH_SETTINGS_SIZE);
 	}
 	my_loc_flash.deinit();
 	return highest_index_seen;
 }
 
-unsigned int virt_EEPROM_write(unsigned char* in_data, unsigned int previous_index) {
-	unsigned int new_index;
+unsigned int virt_EEPROM_write(npr_config* in_data, unsigned int previous_index) {
+	uint32_t new_index;
 	unsigned int loc_address;
 	FlashIAP my_loc_flash;
 	if (previous_index == 0) {
 		previous_index = 0xFF; //next index will be 0x100, errase first sector
 	}
 	new_index = previous_index + 1;
-	//loc_address = NFPR_config_addr_begin + (new_index & 0xFF)*256; //previous config 64kB
-	loc_address = NFPR_config_addr_begin + (new_index & 0x3F)*256; //previous config 
+	loc_address = NFPR_config_addr_begin + (new_index % FLASH_BANKS)*256; //previous config 
 	my_loc_flash.init();
-	if ((new_index & 7) == 0) { //new sector, errase sector
-		HMI_printf ("errase sector:%X\r\n", loc_address);
+	if ((new_index & 7) == 0) { //new sector, erase sector
+		HMI_printf ("erase sector:%X\r\n", loc_address);
 		my_loc_flash.erase(loc_address, 2048);
 	}
+	// Make sure magic number is correct to detect a valid configuration block
+	in_data->magic = CONFIG_MAGIC;
 	// writes new index
-	in_data[0] = (new_index & 0xFF000000) >> 24;
-	in_data[1] = (new_index & 0xFF0000) >> 16;
-	in_data[2] = (new_index & 0xFF00) >> 8;
-	in_data[3] = new_index & 0xFF;
+	in_data->index = new_index;
 	my_loc_flash.program(in_data, loc_address, 256);
 	HMI_printf("write success\r\n");
 	my_loc_flash.deinit();
@@ -104,21 +106,16 @@ void virt_EEPROM_errase_all(void) {
 // higher level functions
 
 void NFPR_config_read(AnalogIn* analog_pin) {
-	int i;
-	unsigned char default_config[260] = NFPR_default_config;
-	config_index = virt_EEPROM_read(raw_config_data);
+	config_index = virt_EEPROM_read(&raw_config_data);
 	if (config_index == 0) { //no previous config found
-		for (i=0; i<256; i++) {
-			raw_config_data[i] = default_config[i];
-		}
+		memcpy(&raw_config_data, &NFPR_default_config, 256);
 		//MAC random 2 LSB values
-		raw_config_data[58] = NFPR_random_generator(analog_pin);
-		raw_config_data[59] = NFPR_random_generator(analog_pin);
-		raw_config_data[5] = raw_config_data[58];//callsign 1st char
-		raw_config_data[6] = raw_config_data[59];//callsign 2nd char
-		config_index = virt_EEPROM_write (raw_config_data, config_index);//save the MAC
+		raw_config_data.mac_ls_bytes = (NFPR_random_generator(analog_pin) << 8) + NFPR_random_generator(analog_pin);
+		// raw_config_data[9] = raw_config_data[62];//callsign 1st char
+		// raw_config_data[10] = raw_config_data[63];//callsign 2nd char
+		config_index = virt_EEPROM_write (&raw_config_data, config_index);//save the MAC
 	}
-	apply_config_from_raw_string(raw_config_data);
+	apply_config_from_raw_string(&raw_config_data);
 	if (is_TDMA_master) {
 		my_client_radio_connexion_state = 2;
 	} else {
@@ -144,74 +141,70 @@ unsigned char NFPR_random_generator(AnalogIn* analog_pin) {
 
 unsigned int NFPR_config_save(void) {
 	if ( (CONF_radio_my_callsign[0] == 0) || (CONF_radio_my_callsign[2] == 0) ) {
-		HMI_printf("ERROR : not yet configured\r\n");
-		
+		HMI_printf("ERROR : not yet configured\r\n");		
 	} else {
-		write_config_to_raw_string(raw_config_data);
-		config_index = virt_EEPROM_write (raw_config_data, config_index);
+		write_config_to_raw_string(&raw_config_data);
+		config_index = virt_EEPROM_write (&raw_config_data, config_index);
 	}
 	return config_index;
 }
 
-void apply_config_from_raw_string(unsigned char* data_r) {
-	int i;
+void apply_config_from_raw_string(npr_config* data_r) {
 	unsigned char modul_temp;
-	is_TDMA_master = (data_r[4] == 1);
-	for (i=0; i<16; i++) {
-		CONF_radio_my_callsign[i] = data_r[5+i];
-	}
+	is_TDMA_master = (data_r->is_master == 1);
+	strncpy(CONF_radio_my_callsign, data_r->callsign, 15);
 	CONF_radio_my_callsign[15] = 0;
-	is_telnet_active = data_r[21];
-	modul_temp = (data_r[22] & 0x3F);
+	is_telnet_active = data_r->telnet_last_active;
+	modul_temp = (data_r->modulation & 0x3F);
 	if ( ((modul_temp>=11)&&(modul_temp<=14)) || ((modul_temp>=20)&&(modul_temp<=24)) ) {
 		CONF_radio_modulation = modul_temp;
 	} else {
 		CONF_radio_modulation = 24;
 	}
-	CONF_frequency_band = (data_r[22] & 0xC0) >> 6;
+	CONF_frequency_band = (data_r->modulation & 0xC0) >> 6;
 	//printf("freq_band:%X modul:%i\r\n", CONF_frequency_band, modul_temp);
-	CONF_radio_frequency = data_r[23];
-	CONF_radio_network_ID = data_r[24];
+	CONF_radio_frequency = data_r->frequency;
+	CONF_radio_network_ID = data_r->radio_network_id;
 	
 	//specific for clients
-	CONF_radio_static_IP_requested = data_r[25];
-	CONF_radio_IP_size_requested = IP_char2int(data_r+26);
-	LAN_conf_saved.DHCP_server_active = data_r[30];
-	LAN_conf_applied.DHCP_server_active = data_r[30];
+	CONF_radio_static_IP_requested = data_r->client_static_IP;
+	CONF_radio_IP_size_requested = data_r->client_req_size;
+	LAN_conf_saved.DHCP_server_active = data_r->dhcp_active;
+	LAN_conf_applied.DHCP_server_active = data_r->dhcp_active;
 	
 	//specific for master
-	LAN_conf_saved.LAN_modem_IP = IP_char2int(data_r+31);
-	LAN_conf_applied.LAN_modem_IP = IP_char2int(data_r+31);
-	LAN_conf_saved.LAN_subnet_mask = IP_char2int(data_r+35);
-	LAN_conf_applied.LAN_subnet_mask = IP_char2int(data_r+35);
-	CONF_radio_IP_size = IP_char2int(data_r+39);
-	LAN_conf_saved.LAN_DNS_activ = data_r[43];
-	LAN_conf_applied.LAN_DNS_activ = data_r[43];
-	LAN_conf_saved.LAN_DNS_value = IP_char2int(data_r+44);
-	LAN_conf_applied.LAN_DNS_value = IP_char2int(data_r+44);
-	LAN_conf_saved.LAN_def_route_activ = data_r[48];
-	LAN_conf_applied.LAN_def_route_activ = data_r[48];
-	LAN_conf_saved.LAN_def_route = IP_char2int(data_r+49);
-	LAN_conf_applied.LAN_def_route = IP_char2int(data_r+49);
-	CONF_radio_IP_start = IP_char2int(data_r+53);
-	is_telnet_routed = data_r[57];
+	LAN_conf_saved.LAN_modem_IP = data_r->modem_IP;
+	LAN_conf_applied.LAN_modem_IP = data_r->modem_IP;
+	LAN_conf_saved.LAN_subnet_mask = data_r->netmask;
+	LAN_conf_applied.LAN_subnet_mask = data_r->netmask;
+	CONF_radio_IP_size = data_r->IP_size;
+	LAN_conf_saved.LAN_DNS_activ = data_r->dns_active;
+	LAN_conf_applied.LAN_DNS_activ = data_r->dns_active;
+	LAN_conf_saved.LAN_DNS_value = data_r->dns_value;
+	LAN_conf_applied.LAN_DNS_value = data_r->dns_value;
+	LAN_conf_saved.LAN_def_route_activ = data_r->def_route_active;
+	LAN_conf_applied.LAN_def_route_activ = data_r->def_route_active;
+	LAN_conf_saved.LAN_def_route = data_r->default_route;
+	LAN_conf_applied.LAN_def_route = data_r->default_route;
+	CONF_radio_IP_start = data_r->IP_start;
+	is_telnet_routed = data_r->telnet_routed;
 	CONF_modem_MAC[0] = 0x4E;//N
 	CONF_modem_MAC[1] = 0x46;//F
 	CONF_modem_MAC[2] = 0x50;//P
 	CONF_modem_MAC[3] = 0x52;//R
-	CONF_modem_MAC[4] = data_r[58];
-	CONF_modem_MAC[5] = data_r[59];
-	CONF_radio_default_state_ON_OFF = data_r[60];
-	CONF_radio_PA_PWR = data_r[61];
+	CONF_modem_MAC[4] = data_r->mac_ls_bytes >> 8;
+	CONF_modem_MAC[5] = data_r->mac_ls_bytes & 0xff;
+	CONF_radio_default_state_ON_OFF = data_r->radio_on_at_start;
+	CONF_radio_PA_PWR = data_r->rf_power;
 	
-	CONF_frequency_HD = ((data_r[64]) <<8 ) | data_r[65];
+	CONF_frequency_HD = data_r->frequency_2;
 	if ( (CONF_frequency_HD == 0x0000) || (CONF_frequency_HD > FREQ_MAX_RAW) ) {
 		CONF_frequency_HD = CONF_DEF_FREQ; // force to default frequency
 	}
-	CONF_freq_shift = ((data_r[66]) <<8) | data_r[67];
-	CONF_transmission_method = data_r[68];
-	CONF_master_FDD = data_r[69];
-	CONF_master_down_IP = IP_char2int(data_r+70);
+	CONF_freq_shift = data_r->shift;
+	CONF_transmission_method = data_r->transmission_method;
+	CONF_master_FDD = data_r->master_fdd;
+	CONF_master_down_IP = data_r->master_fdd_down_IP;
 	
 	if (LAN_conf_applied.DHCP_server_active == 1) {
 		LAN_conf_applied.DHCP_range_start = CONF_radio_IP_start;
@@ -226,42 +219,37 @@ void apply_config_from_raw_string(unsigned char* data_r) {
 	}
 }
 
-void write_config_to_raw_string (unsigned char* data_r) {
+void write_config_to_raw_string (npr_config* data_r) {
 	int i;
-	data_r[4] = is_TDMA_master;
-	for (i=0; i<16; i++) {
-		data_r[5+i] = CONF_radio_my_callsign[i];
-	}
-	data_r[21] = is_telnet_active;
-	data_r[22] = ( (CONF_frequency_band << 6) & 0xC0) + (CONF_radio_modulation & 0x3F);
-	data_r[23] = CONF_radio_frequency;
-	data_r[24] = CONF_radio_network_ID;
+	data_r->is_master = is_TDMA_master;
+	strncpy(data_r->callsign, CONF_radio_my_callsign, 15);
+	data_r->telnet_last_active = is_telnet_active;
+	data_r->modulation = ( (CONF_frequency_band << 6) & 0xC0) + (CONF_radio_modulation & 0x3F);
+	data_r->frequency = CONF_radio_frequency;
+	data_r->radio_network_id = CONF_radio_network_ID;
 	
 	//specific for clients
-	data_r[25] = CONF_radio_static_IP_requested;
-	IP_int2char(CONF_radio_IP_size_requested, data_r+26); 
-	data_r[30] = LAN_conf_saved.DHCP_server_active;
+	data_r->client_static_IP = CONF_radio_static_IP_requested;
+	data_r->client_req_size = CONF_radio_IP_size_requested;
+	data_r->dhcp_active = LAN_conf_saved.DHCP_server_active;
 	
 	//specific for master
-	IP_int2char(LAN_conf_saved.LAN_modem_IP, data_r+31);
-	IP_int2char(LAN_conf_saved.LAN_subnet_mask, data_r+35);
-	IP_int2char(CONF_radio_IP_size, data_r+39);
-	data_r[43] = LAN_conf_saved.LAN_DNS_activ;
-	IP_int2char(LAN_conf_saved.LAN_DNS_value, data_r+44);
-	data_r[48] = LAN_conf_saved.LAN_def_route_activ;
-	IP_int2char(LAN_conf_saved.LAN_def_route, data_r+49);
-	IP_int2char(CONF_radio_IP_start, data_r+53);
-	data_r[57] = is_telnet_routed;
-	data_r[58] = CONF_modem_MAC[4];
-	data_r[59] = CONF_modem_MAC[5];
-	data_r[60] = CONF_radio_default_state_ON_OFF;
-	data_r[61] = CONF_radio_PA_PWR;
+	data_r->modem_IP = LAN_conf_saved.LAN_modem_IP;
+	data_r->netmask = LAN_conf_saved.LAN_subnet_mask;
+	data_r->IP_size = CONF_radio_IP_size;
+	data_r->dns_active = LAN_conf_saved.LAN_DNS_activ;
+	data_r->dns_value = LAN_conf_saved.LAN_DNS_value;
+	data_r->def_route_active =LAN_conf_saved.LAN_def_route_activ;
+	data_r->default_route = LAN_conf_saved.LAN_def_route;
+	data_r->IP_start = CONF_radio_IP_start;
+	data_r->telnet_routed =is_telnet_routed;
+	data_r->mac_ls_bytes = CONF_modem_MAC[4] * 256 + CONF_modem_MAC[5];
+	data_r->radio_on_at_start = CONF_radio_default_state_ON_OFF;
+	data_r->rf_power = CONF_radio_PA_PWR;
 	
-	data_r[64] = (CONF_frequency_HD & 0xFF00)>>8;
-	data_r[65] = (CONF_frequency_HD & 0x00FF);
-	data_r[66] = (CONF_freq_shift & 0xFF00)>>8;
-	data_r[67] = (CONF_freq_shift & 0x00FF);
-	data_r[68] = CONF_transmission_method;
-	data_r[69] = CONF_master_FDD;
-	IP_int2char(CONF_master_down_IP, data_r+70);
+	data_r->frequency_2 = CONF_frequency_HD;
+	data_r->shift = CONF_freq_shift;
+	data_r->transmission_method = CONF_transmission_method;
+	data_r->master_fdd= CONF_master_FDD;
+	data_r->master_fdd_down_IP = CONF_master_down_IP;
 }

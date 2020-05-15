@@ -1,0 +1,108 @@
+WIZKER-IO-MIB DEFINITIONS ::= BEGIN
+
+--
+-- Global MIB for all devices under the Wizkers organization
+--
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, Integer32,
+    enterprises FROM SNMPv2-SMI
+;
+
+wizkersIO MODULE-IDENTITY
+    LAST-UPDATED "202005160000Z"
+    ORGANIZATION "www.wizkers.io"
+    CONTACT-INFO    
+	 "postal:   Ed Lafargue
+
+          email:    ed@wizkers.io"
+    DESCRIPTION
+    "Added the NPR-70 Amateur Radio modem"
+    REVISION     "202005160000Z"
+    DESCRIPTION
+    	"MIB for the Wizkers.io products"
+    ::= { enterprises 54539 } 
+
+
+--
+-- top level structure
+--
+npr70Modem                  OBJECT IDENTIFIER ::= { wizkersIO 100 }
+
+
+--
+-- Values for the NPR-70
+--
+
+npr70ModemTemperature OBJECT-TYPE
+    SYNTAX      Gauge32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+	"This is the system temperature of the modem."
+    DEFVAL { 0 }
+    ::= { npr70Modem 1 }
+
+npr70ModemLinkStatus OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+	"Modem link status. Values can be:
+       1 -> Waiting for connection
+       2 -> Link established
+       3 -> Connection rejected"
+    DEFVAL { 0 }
+    ::= { npr70Modem 2 }
+
+npr70ModemLinkDistance OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+	"This is raw calculated link distance.
+    Value in km is : 0.15 * value."
+    DEFVAL { 0 }
+    ::= { npr70Modem 3 }
+
+npr70ModemUplinkRSSI OBJECT-TYPE
+    SYNTAX      Gauge32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+	"Uplink RSSI raw value.
+    dBm value is calculated as value / 2 - 136."
+    DEFVAL { 0 }
+    ::= { npr70Modem 4 }
+
+npr70ModemDownlinkRSSI OBJECT-TYPE
+    SYNTAX      Gauge32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+	"Downlink RSSI raw value.
+    dBm value is calculated as value / 2 - 136."
+    DEFVAL { 0 }
+    ::= { npr70Modem 5 }
+
+npr70ModemUplinkBER OBJECT-TYPE
+    SYNTAX      Gauge32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+	"Uplink bit error rate raw value.
+    Value in percent calculated as value / 500."
+    DEFVAL { 0 }
+    ::= { npr70Modem 6 }
+
+npr70ModemDownlinkBER OBJECT-TYPE
+    SYNTAX      Gauge32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+	"Downlink bit error rate raw value.
+    Value in percent calculated as value / 500."
+    DEFVAL { 0 }
+    ::= { npr70Modem 7 }
+
+END

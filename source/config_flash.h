@@ -20,61 +20,91 @@
 
 #include "mbed.h"
 
-//#define NFPR_config_addr_begin 0x08030000
-#define NFPR_config_addr_begin 0x0803C000
+#define NFPR_config_addr_begin 0x0803D000
+#define CONFIG_MAGIC 0xbabebabe
 
-#define NFPR_default_config { \
-	0,0,0,0, /*		index*/\
-	0, /*			is_master*/\ 
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*callsign*/\ 
-	1, /*			telnet_active*/\
-	24, /*			modulation*/\
-	175, /*			frequency (175 = 437MHz)*/\
-	0, /*			radio_netw_ID*/\
-	0, /*			client_static_IP*/\
-	0,0,0,1, /*		client_req_size*/\
-	1, /*			DHCP server active*/\
-	192,168,0,253, /*	modem_IP*/\
-	255,255,255,0, /*netmask*/\
-	0,0,0,32, /*	IP_size*/\
-	1, /*			DNS_active*/\
-	9,9,9,9, /*		DNS_value*/\
-	1, /*			def_route_active*/\
-	192,168,0,1, /*	def_route_val*/\
-	192,168,0,65, /*IP_begin*/\
-	1, /*			telnet_routed*/\
-	0,0, /*			MAC 2 LS bytes*/\
-	0, /*			radio_on_at_start*/\
-	127, /*			RF_power*/\
-	0,0, /*			checksum*/\
-	66, 104, /*		frequency MSB LSB 437.000*/\
-	00, 00,  /*		frequency shift MSB LSB 0*/\
-	0, /*			transmission method 0=IP 1=Ethernet*/\
-	0, /*			master_FDD 0=no 1=down 2=up*/\
-	192,168,0,252,/*master_FDD_down_IP*/\
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*static client 0 24 entries*/\
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 /*static client 7*/\
-}
+// Note: 256 bytes long
+typedef struct {
+	uint32_t magic;
+	uint32_t index;
+	uint8_t  is_master;
+	char     callsign[16];
+	uint8_t  telnet_last_active;
+	uint8_t  modulation;
+	uint8_t  frequency;
+	uint8_t  radio_network_id;
+	uint8_t  client_static_IP;
+	uint32_t client_req_size;
+	uint8_t  dhcp_active;
+	uint32_t modem_IP;
+	uint32_t netmask;
+	uint32_t IP_size;
+	uint8_t  dns_active;
+	uint32_t dns_value;
+	uint8_t  def_route_active;
+	uint32_t default_route;
+	uint32_t IP_start;
+	uint8_t  telnet_routed;
+	uint16_t mac_ls_bytes;
+	uint8_t  radio_on_at_start;
+	uint8_t  rf_power;
+	uint16_t checksum;
+	uint16_t frequency_2;
+	uint16_t shift;
+	uint8_t  transmission_method;
+	uint8_t  master_fdd;
+	uint32_t master_fdd_down_IP;
+	uint8_t static_client_entries[178];
+} __attribute__((packed)) npr_config; // Ensure the structure is packed to have predictable results in the flash!
 
-unsigned int virt_EEPROM_read(unsigned char* data);
+#define config_size sizeof(npr_config)
+
+const npr_config NFPR_default_config {
+	.magic = CONFIG_MAGIC,
+	.index = 0x000000,
+	.is_master = 0,
+	.callsign = "N0CALL-1       ",
+	.telnet_last_active = 1,
+	.modulation = 24,
+	.frequency = 175,
+	.radio_network_id = 0,
+	.client_static_IP = 0,
+	.client_req_size = 0x00000001,
+	.dhcp_active = 1,
+	.modem_IP = 0xc0a800fd, // 192.168.0.253
+	.netmask = 0xffffff00,
+	.IP_size = 0x00000020, // 32
+	.dns_active = 1,
+	.dns_value = 0x09090909,
+	.def_route_active = 1,
+	.default_route = 0xc0a800fd, // 192.168.0.1
+	.IP_start = 0xc0a80041,  // 192.168.0.65
+	.telnet_routed = 1,
+	.mac_ls_bytes = 0x0000,
+	.radio_on_at_start = 0,
+	.rf_power = 127,
+	.checksum = 0,
+	.frequency_2 = 0x4268,
+	.shift = 0x0000,
+	.transmission_method = 0,
+	.master_fdd = 0,
+	.master_fdd_down_IP = 0xc0a800fd, // 192.168.0.252
+	.static_client_entries = {0}
+};
+
+unsigned int virt_EEPROM_read(npr_config* data);
 
 unsigned char NFPR_random_generator(AnalogIn* analog_pin);
 
-unsigned int virt_EEPROM_write(unsigned char* in_data, unsigned int previous_index);
+unsigned int virt_EEPROM_write(npr_config* in_data, unsigned int previous_index);
 
 void virt_EEPROM_errase_all(void);
 
 void virt_EEPROM_debug_read(void);
 
-void apply_config_from_raw_string(unsigned char* data_r);
+void apply_config_from_raw_string(npr_config* data_r);
 
-void write_config_to_raw_string (unsigned char* data_r);
+void write_config_to_raw_string (npr_config* data_r);
 
 void NFPR_config_read(AnalogIn* analog_pin);
 

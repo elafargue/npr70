@@ -58,7 +58,7 @@ int telnet_loop (W5500_chip* W5500) {
 	current_state = W5500_read_byte(W5500, W5500_Sn_SR, TELNET_SOCKET);
 	//printf("state: %x\r\n", current_state);
 	if ((current_state == W5500_SOCK_ESTABLISHED) && (previous_state != W5500_SOCK_ESTABLISHED)) {
-		W5500_read_long(W5500, 0x000C, TELNET_SOCKET, RX_data, 4);
+		W5500_read_long(W5500, W5500_Sn_DIPR0, TELNET_SOCKET, RX_data, 4);
 		printf("\r\n\r\nnew telnet connexion from %i.%i.%i.%i\r\nserial inactive...\r\n", RX_data[0], RX_data[1], RX_data[2], RX_data[3]);
 		fflush(stdout);
 		//TX_data[0] = 0xFF; //IAC
@@ -114,7 +114,7 @@ int telnet_loop (W5500_chip* W5500) {
 		timer_snapshot = GLOBAL_timer.read_us();
 		if ((timer_snapshot - telnet_last_activity) > 300000000) { //300000000
 			//HMI_printf("Telnet inactivity timeout. Force exit.\r\n");
-			W5500_write_byte(W5500_p1, 0x0001, TELNET_SOCKET, 0x08); //close TCP
+			W5500_write_byte(W5500_p1, W5500_Sn_CR, TELNET_SOCKET, 0x08); //close TCP
 			is_telnet_opened = 0;
 			echo_ON = 1;
 			display_status_ongoing = 0;
