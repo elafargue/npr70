@@ -94,6 +94,8 @@ int main()
 	G_PTT_PA_pin = &PTT_PA_pin;
 	
 	reset_DHCP_table(LAN_conf_p);
+
+	snmp_init();
 		
     spi_2.format(8,0);
 	spi_1.format(8,0);

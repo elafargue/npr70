@@ -33,8 +33,8 @@ dataEntryType snmpData[] =
         // SysDescr Entry
         {8, {0x2b, 6, 1, 2, 1, 1, 1, 0}, ASN_OCTETSTRING, 6, {"NPR-70"}, NULL, NULL},
 
-        // SysUptime Entry (not working yet)
-        // {8, {0x2b, 6, 1, 2, 1, 1, 3, 0}, ASN_TIMETICKS, 0, { .intval = 0x2345 }, NULL, NULL},
+        // SysUptime Entry
+        {8, {0x2b, 6, 1, 2, 1, 1, 3, 0}, ASN_TIMETICKS, 0, {}, snmpGetUptime, NULL},
 
         // 1.3.6.1.4.1.54539 (Wizkers)
         //               .100 (NPR-70)
@@ -76,6 +76,12 @@ void hexdump(uint8_t *buffer, uint16_t len)
         printf(" %02x", buffer[i]);
     }
     printf("\r\n");
+}
+
+void snmpGetUptime(void *ptr, uint8_t *len) {
+    time_t seconds = time(NULL);
+    *(uint32_t *)ptr = (uint32_t)(seconds*100); // Time in 100th of a second
+    *len = 4; 
 }
 
 void snmpGetVar(void *ptr, uint8_t *len,  const uint32_t var) {
@@ -623,6 +629,13 @@ int8_t parse_snmp()
     insertRespLen(tlv.start, respLoc, size);
 
     return 0;
+}
+
+/**
+ * Initialize the SNMP stack
+ */
+void snmp_init() {
+    set_time(0);
 }
 
 /**

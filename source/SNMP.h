@@ -121,8 +121,9 @@ typedef struct {
  * Very simplistic implementation of a SNMP agent that will return basic stats
  * on the modem. Read only, community is 'public'
  */
-void snmp_init(uint8_t snmp_socket);
+void snmp_init();
 void snmp_loop(W5500_chip* W5500);
+void snmpGetUptime(void *ptr, uint8_t *len);
 void snmpGetTemp(void *ptr, uint8_t *len); // Get system temperature callback
 void snmpGetLinkStatus(void *ptr, uint8_t *len);
 void snmpGetLinkDistance(void *ptr, uint8_t *len);
