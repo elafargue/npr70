@@ -21,12 +21,14 @@
 #include "Eth_IPv4.h"
 
 /**
- * Reads more than 2 bytes starting at W5500_addr inside of block bloc_addr
+ * Reads more than 2 bytes starting at W5500_addr inside of block bloc_addr.
+ * Note: the first three bytes written in RX_data buffer are the W5500_addr and
+ *        block address, followed by the actual data that was read.
+ * RX_size has to be > 3.
  */
-void W5500_read_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, unsigned char* RX_data, int RX_size)
+void W5500_read_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, uint8_t* RX_data, int RX_size)
 {
-    unsigned char W5_command[3];
-	unsigned char trash[20];
+    uint8_t W5_command[3];
 	// W5500 frames start with the following header
 	// - Address Phase: specifies the register address (2 bytes)
 	// - Control Phase: specifies the block, read/write mode and SPI operation mode
@@ -34,104 +36,63 @@ void W5500_read_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned ch
     W5_command[0] = W5500_addr / 256;
     W5_command[1] = W5500_addr & 0xFF;
     W5_command[2] = (bloc_addr * 0x08); // Read at Block bloc_addr in Variable Length Data mode
-    *(SPI_p_loc->cs)=0;
-	RX_data[0]=0;
-    
-	SPI_p_loc->spi_port->transfer_2 (W5_command, 3, trash, 3);
-	SPI_p_loc->spi_port->transfer_2 (trash, RX_size, RX_data, RX_size);
+	SPI_p_loc->cs->write(0);
+	RX_data[0]=0; 
+	SPI_p_loc->spi_port->write((const char*) W5_command, 3, (char*) RX_data, RX_size);
     wait_us(1);
-    *(SPI_p_loc->cs)=1;
+	SPI_p_loc->cs->write(1);
 	wait_us(2);
 }
 
 /**
  * Write a large amount of data
  */
-void W5500_write_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, unsigned char* TX_data, int TX_size) {
-    unsigned char W5_command[4];
-	static unsigned char trash[1600];
+void W5500_write_long(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, const uint8_t* TX_data, int TX_size) {
+    uint8_t W5_command[4];
 	
     W5_command[0] = W5500_addr / 256;
     W5_command[1] = W5500_addr & 0xFF;
     W5_command[2] = (bloc_addr * 0x08) + 4; // Write at Block bloc_addr in Variable Length Data mode
 	SPI_p_loc->cs->write(0);
-	SPI_p_loc->spi_port->transfer_2 (W5_command, 3, trash, 3);
-	SPI_p_loc->spi_port->transfer_2 (TX_data, TX_size, trash, 0);
-	
+	SPI_p_loc->spi_port->write((const char*) W5_command, 3, NULL, 0);
+	SPI_p_loc->spi_port->write((const char*)TX_data, TX_size, NULL, 0);
+	// TODO: loop to wait until W5500 is ready rather than use a wait call
     wait_us(1);
 	SPI_p_loc->cs->write(1);
 	wait_us(2);
 }
 
 /**
- * Read 2 bytes starting at W5500_addr inside of block at bloc_addr
+ * Read 2 bytes starting at W5500_addr inside of block at bloc_addr.
  */
 void W5500_read_short(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, uint8_t* RX_data_ext) {
-    uint8_t TX_data_loc[5];
     uint8_t RX_data_loc[5];
-    TX_data_loc[0] = W5500_addr / 256;
-    TX_data_loc[1] = W5500_addr & 0xFF;
-    TX_data_loc[2] = (bloc_addr * 0x08) ;
-	SPI_p_loc->cs->write(0);
-	SPI_p_loc->spi_port->transfer_2 (TX_data_loc, 5, RX_data_loc, 5);
+	W5500_read_long(SPI_p_loc, W5500_addr, bloc_addr, RX_data_loc, 5);
     RX_data_ext[0] = RX_data_loc[3];
     RX_data_ext[1] = RX_data_loc[4];
-    wait_us(1);
-	SPI_p_loc->cs->write(1);
-	wait_us(2);
-}
-
-/**
- * Write a small amount of data (up to 7 bytes)
- */
-void W5500_write_short(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, unsigned char* TX_data_ext, int TX_size) {
-    unsigned char TX_data_loc[10];
-	unsigned char trash[10];
-    int i;
-    TX_data_loc[0] = W5500_addr / 256;
-    TX_data_loc[1] = W5500_addr & 0xFF;
-    TX_data_loc[2] = (bloc_addr * 0x08) + 4;
-    for (i=0; i < TX_size; i++) {
-        TX_data_loc[i+3] = TX_data_ext[i];
-    }
-	SPI_p_loc->cs->write(0);
-	SPI_p_loc->spi_port->transfer_2 (TX_data_loc, TX_size+3, trash, 0);
-	wait_us(1);
-	SPI_p_loc->cs->write(1);
-	wait_us(2);
 }
 
 /**
  * Read byte at address W5500_addr inside of block at bloc_addr
  */
-unsigned char W5500_read_byte(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr) {
-    char TX_data_loc[4];
-    char RX_data_loc[4];
-	unsigned char data_out;
-    TX_data_loc[0] = W5500_addr / 256;
-    TX_data_loc[1] = W5500_addr & 0xFF;
-    TX_data_loc[2] = (bloc_addr * 0x08);  // Read at Block bloc_addr in Variable Length Data mode, N-Byte data phase
-	SPI_p_loc->cs->write(0);
-	SPI_p_loc->spi_port->transfer_2(TX_data_loc, 4, RX_data_loc, 4); 
-    wait_us(1);
-	SPI_p_loc->cs->write(1);
-    data_out = RX_data_loc[3]; 
-	return data_out;
-	wait_us(2);
+uint8_t W5500_read_byte(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr) {
+    uint8_t RX_data_loc[4];
+	W5500_read_long(SPI_p_loc, W5500_addr, bloc_addr, RX_data_loc, 4);
+	return RX_data_loc[3];
 }
 
 /**
- * Write a single byte at address W5500_addr inside of block at bloc_addr
+ * Write a single byte at address W5500_addr inside of block at bloc_addr. Should be marginally faster than
+ * the write_long routine because we do only one SPI transfer
  */
 void W5500_write_byte(W5500_chip* SPI_p_loc, unsigned int W5500_addr, unsigned char bloc_addr, uint8_t data) {
     uint8_t TX_data_loc[4];
-	uint8_t trash[4];
     TX_data_loc[0] = W5500_addr / 256;
     TX_data_loc[1] = W5500_addr & 0xFF;
     TX_data_loc[2] = (bloc_addr * 0x08) + 4;
     TX_data_loc[3] = data;
 	SPI_p_loc->cs->write(0);
-	SPI_p_loc->spi_port->transfer_2(TX_data_loc, 4, trash, 0);
+	SPI_p_loc->spi_port->write((const char*) TX_data_loc, 4, NULL, 0);
 	wait_us(1);
 	SPI_p_loc->cs->write(1);
 	wait_us(2);
@@ -170,29 +131,33 @@ int W5500_read_TX_free_size(W5500_chip* SPI_p_loc, uint8_t sock_nb) {
 	return size;
 }
 
+/**
+ * Reads the reception buffer. Warning: size has to be > 3, and the first three bytes
+ * returned are the W5500 address / block, so actual data only starts at byte 4.
+ */
 void W5500_read_RX_buffer(W5500_chip* SPI_p_loc, uint8_t sock_nb, uint8_t* data, int size) {
 	uint8_t read_pointer_raw[2];
 	uint16_t read_pointer;
 	W5500_read_short(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw);
 	read_pointer = read_pointer_raw[1] + read_pointer_raw[0] * 256;
 	W5500_read_long(SPI_p_loc, read_pointer, sock_nb+2, data, size);
-	read_pointer = read_pointer + size ;
+	read_pointer = read_pointer + size - 3;
 	read_pointer_raw[0] = read_pointer / 256;
 	read_pointer_raw[1] = read_pointer & 0xFF;
-	W5500_write_short(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw, 2);
+	W5500_write_long(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw, 2);
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, sock_nb, 0x40);
 }
 
 /**
  * Receive a UDP packet into buffer data with max length len.
  * Returns the actual length of the UDP packet
+ * 
  */
 uint32_t W5500_read_UDP_pckt (W5500_chip* SPI_p_loc, uint8_t sock_nb, uint8_t* data, uint32_t len) {
 	uint32_t size = 0;
 	uint8_t read_pointer_raw[2];
 	uint16_t read_pointer;
-	uint8_t trash[20];
-	uint8_t W5_command[20];
+	uint8_t W5_command[3];
 	W5500_read_short(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw);
 	read_pointer = (read_pointer_raw[0] << 8) + read_pointer_raw[1];
 	// Read first 8 bytes ( IP address (4), Port (2), Packet size (2))
@@ -200,33 +165,36 @@ uint32_t W5500_read_UDP_pckt (W5500_chip* SPI_p_loc, uint8_t sock_nb, uint8_t* d
 	W5_command[1] = read_pointer_raw[1];
 	W5_command[2] = (sock_nb+2) * 0x08;
 	SPI_p_loc->cs->write(0);
-	SPI_p_loc->spi_port->transfer_2 (W5_command, 3, trash, 3);
-	SPI_p_loc->spi_port->transfer_2 (trash, 8, data, 8);
+
+	SPI_p_loc->spi_port->write((const char*) W5_command, 3, NULL, 0);
+	SPI_p_loc->spi_port->write(NULL, 0, (char*) data, 8); // Get the UDP header
 	size = data [7] + 256 * data[6];
-	// BEWARE:n I don't get how this does not blow stuff up, sicne the size of `trash`
-	// can be way below `size`
-	SPI_p_loc->spi_port->transfer_2 (trash, size, data+8, size);
-	
+	if ( size > (len-8))
+		size = len-8; // Make sure we don't go past the size of `data`
+	SPI_p_loc->spi_port->write(NULL, 0, (char*) data+8, size); // Receive the payload of the UDP packet
+
 	size = size + 8;
 	wait_us(1);
 	SPI_p_loc->cs->write(1);
 	wait_us(2);
-	//printf ("size UDP:%d\r\n", size);
+	// printf ("size UDP:%d\r\n", size);
 
 	read_pointer = read_pointer + size ;		
 	read_pointer_raw[0] = read_pointer / 256;
 	read_pointer_raw[1] = read_pointer & 0xFF;
-	W5500_write_short(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw, 2);
+	W5500_write_long(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw, 2);
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, sock_nb, 0x40); //command receive
 	return size; 
 }
 
+/**
+ * Warning: no check that `data` is large enough for the data we're receiving
+ */
 int W5500_read_MAC_pckt (W5500_chip* SPI_p_loc, uint8_t sock_nb, unsigned char* data) {
 	int size=0;
 	unsigned char read_pointer_raw[10];
-	unsigned char trash[20];
 	unsigned short read_pointer;
-	unsigned char W5_command[20];
+	uint8_t W5_command[3];
 	W5500_read_short(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw);
 	read_pointer = read_pointer_raw[1] + read_pointer_raw[0] * 256;
 	// read first 8 bytes
@@ -234,10 +202,10 @@ int W5500_read_MAC_pckt (W5500_chip* SPI_p_loc, uint8_t sock_nb, unsigned char* 
 	W5_command[1] = read_pointer_raw[1];
 	W5_command[2] = (sock_nb+2) * 0x08;
 	SPI_p_loc->cs->write(0);
-	SPI_p_loc->spi_port->transfer_2 (W5_command, 3, trash, 3);
-	SPI_p_loc->spi_port->transfer_2 (trash, 2, data, 2);
+	SPI_p_loc->spi_port->write ((const char*) W5_command, 3, NULL, 0);
+	SPI_p_loc->spi_port->write (NULL, 0, (char*) data, 2);
 	size = data [1] + 256 * data[0];
-	SPI_p_loc->spi_port->transfer_2 (trash, size-2, data+2, size-2);
+	SPI_p_loc->spi_port->write (NULL, 0, (char*) data+2, size-2);
 	
 	wait_us(1);
 	SPI_p_loc->cs->write(1);
@@ -247,7 +215,7 @@ int W5500_read_MAC_pckt (W5500_chip* SPI_p_loc, uint8_t sock_nb, unsigned char* 
 		
 	read_pointer_raw[0] = read_pointer / 256;
 	read_pointer_raw[1] = read_pointer & 0xFF;
-	W5500_write_short(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw, 2);
+	W5500_write_long(SPI_p_loc, W5500_Sn_RX_RD0, sock_nb, read_pointer_raw, 2);
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, sock_nb, 0x40);
 	return size; 
 }
@@ -261,7 +229,7 @@ void W5500_write_TX_buffer(W5500_chip* SPI_p_loc, uint8_t sock_nb, unsigned char
 	write_pointer = write_pointer + size ;
 	write_pointer_raw[0] = write_pointer / 256;
 	write_pointer_raw[1] = write_pointer & 0xFF;
-	W5500_write_short(SPI_p_loc, 0x0024, sock_nb, write_pointer_raw, 2);
+	W5500_write_long(SPI_p_loc, 0x0024, sock_nb, write_pointer_raw, 2);
 	if (send_mac == 1) {
 		W5500_write_byte(SPI_p_loc, W5500_Sn_CR, sock_nb, 0x21);
 	} else {
@@ -388,7 +356,7 @@ void W5500_initial_configure(W5500_chip* SPI_p_loc) {
     wait_ms(10);
     data[0]=0x00; //port 0d23
     data[1]=0x17;
-    W5500_write_short(SPI_p_loc, W5500_Sn_PORT0, TELNET_SOCKET, data, 2); //port 23 (0x17)
+    W5500_write_long(SPI_p_loc, W5500_Sn_PORT0, TELNET_SOCKET, data, 2); //port 23 (0x17)
 	//W5500_write_byte(SPI_p_loc, 0x002C, TELNET_SOCKET, 0x00); //interrupt mask
 	
 	// Socket 2 RTP port 1519
@@ -396,26 +364,26 @@ void W5500_initial_configure(W5500_chip* SPI_p_loc) {
 	wait_ms(10);
 	data[0]=0x05; //port 0d1519
     data[1]=0xEF;
-	W5500_write_short(SPI_p_loc, W5500_Sn_PORT0, RTP_SOCKET, data, 2); //port rx 1519 
+	W5500_write_long(SPI_p_loc, W5500_Sn_PORT0, RTP_SOCKET, data, 2); //port rx 1519 
 	data[0]=0x05; //port 0d1516
     data[1]=0xEC;
-	W5500_write_short(SPI_p_loc, W5500_Sn_DPORT0, RTP_SOCKET, data, 2); //port tx 1516
+	W5500_write_long(SPI_p_loc, W5500_Sn_DPORT0, RTP_SOCKET, data, 2); //port tx 1516
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, RTP_SOCKET, 0x01); // open
 	data[0]=10;
 	data[1]=151;
 	data[2]=0;
 	data[3]=60;
-	W5500_write_short(SPI_p_loc, W5500_Sn_DIPR0, RTP_SOCKET, data, 4); //IP destination 10.151.0.21
+	W5500_write_long(SPI_p_loc, W5500_Sn_DIPR0, RTP_SOCKET, data, 4); //IP destination 10.151.0.21
 	
 	// Socket 3 DHCP server
 	W5500_write_byte(SPI_p_loc, W5500_Sn_MR, DHCP_SOCKET, 0x02); //config
 	wait_ms(10);
 	data[0]=0x00; //port 0d67
     data[1]=0x43;
-	W5500_write_short(SPI_p_loc, W5500_Sn_PORT0, DHCP_SOCKET, data, 2); //port rx 67 
+	W5500_write_long(SPI_p_loc, W5500_Sn_PORT0, DHCP_SOCKET, data, 2); //port rx 67 
 	data[0]=0x00; //port 0d68
     data[1]=0x44;
-	W5500_write_short(SPI_p_loc, W5500_Sn_DPORT0, DHCP_SOCKET, data, 2); //port tx 68
+	W5500_write_long(SPI_p_loc, W5500_Sn_DPORT0, DHCP_SOCKET, data, 2); //port tx 68
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, DHCP_SOCKET, 0x01); // open
 	data[0]=255;
 	data[1]=255;
@@ -423,29 +391,29 @@ void W5500_initial_configure(W5500_chip* SPI_p_loc) {
 	data[3]=255;
 	data[4]=255;
 	data[5]=255;
-	W5500_write_short(SPI_p_loc, W5500_Sn_DIPR0, DHCP_SOCKET, data, 4); //IP destination 255.255.255.255
-	W5500_write_short(SPI_p_loc, W5500_Sn_DHAR0, DHCP_SOCKET, data, 6);
+	W5500_write_long(SPI_p_loc, W5500_Sn_DIPR0, DHCP_SOCKET, data, 4); //IP destination 255.255.255.255
+	W5500_write_long(SPI_p_loc, W5500_Sn_DHAR0, DHCP_SOCKET, data, 6);
 	
 	// Socket 4 UDP_FDD
 	W5500_write_byte(SPI_p_loc, W5500_Sn_MR, FDD_SOCKET, 0x42); //config
 	wait_ms(10);
 	data[0]=0x1A; //port TX 0d6716 = 0x1A3E
     data[1]=0x3E;
-	W5500_write_short(SPI_p_loc, W5500_Sn_PORT0, FDD_SOCKET, data, 2);
+	W5500_write_long(SPI_p_loc, W5500_Sn_PORT0, FDD_SOCKET, data, 2);
 	data[0]=0x1A; //port RX 0d6718 = 0x1A3C
     data[1]=0x3C;
-	W5500_write_short(SPI_p_loc, W5500_Sn_DPORT0, FDD_SOCKET, data, 2);
+	W5500_write_long(SPI_p_loc, W5500_Sn_DPORT0, FDD_SOCKET, data, 2);
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, FDD_SOCKET, 0x01); // open
 	IP_int2char (CONF_master_down_IP, data);
-	W5500_write_short(SPI_p_loc, W5500_Sn_DIPR0, FDD_SOCKET, data, 4);
+	W5500_write_long(SPI_p_loc, W5500_Sn_DIPR0, FDD_SOCKET, data, 4);
 
 	// Socket 5 SNMP Agent
 	W5500_write_byte(SPI_p_loc, W5500_Sn_MR, SNMP_SOCKET, 0x02); //config
 	wait_ms(10);
 	data[0]=0x00; //port 161
     data[1]=0xa1;
-	W5500_write_short(SPI_p_loc, W5500_Sn_PORT0, SNMP_SOCKET, data, 2); //port rx 161
-	// W5500_write_short(SPI_p_loc, W5500_Sn_DPORT0, SNMP_SOCKET, data, 2); //port tx 161
+	W5500_write_long(SPI_p_loc, W5500_Sn_PORT0, SNMP_SOCKET, data, 2); //port rx 161
+	// W5500_write_long(SPI_p_loc, W5500_Sn_DPORT0, SNMP_SOCKET, data, 2); //port tx 161
 	W5500_write_byte(SPI_p_loc, W5500_Sn_CR, SNMP_SOCKET, 0x01); // Open the socket
 	
 	// Socket 6

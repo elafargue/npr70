@@ -644,8 +644,8 @@ void snmp_loop(W5500_chip *W5500)
         for (int i=0;i<6;i++) {
             buf[i] = request_msg.buffer[i];
         }
-	    W5500_write_short(W5500, W5500_Sn_DIPR0, SNMP_SOCKET, buf, 4); //IP destination
-        W5500_write_short(W5500, W5500_Sn_DPORT0, SNMP_SOCKET, buf+4, 2); //port tx
+	    W5500_write_long(W5500, W5500_Sn_DIPR0, SNMP_SOCKET, buf, 4); //IP destination
+        W5500_write_long(W5500, W5500_Sn_DPORT0, SNMP_SOCKET, buf+4, 2); //port tx
 
         // Initialize the response
         // We have 8 extra bytes at the beginning we don't want, so we realign the buffer:

@@ -58,8 +58,9 @@ int telnet_loop (W5500_chip* W5500) {
 	current_state = W5500_read_byte(W5500, W5500_Sn_SR, TELNET_SOCKET);
 	//printf("state: %x\r\n", current_state);
 	if ((current_state == W5500_SOCK_ESTABLISHED) && (previous_state != W5500_SOCK_ESTABLISHED)) {
-		W5500_read_long(W5500, W5500_Sn_DIPR0, TELNET_SOCKET, RX_data, 4);
-		printf("\r\n\r\nnew telnet connexion from %i.%i.%i.%i\r\nserial inactive...\r\n", RX_data[0], RX_data[1], RX_data[2], RX_data[3]);
+		W5500_read_long(W5500, W5500_Sn_DIPR0, TELNET_SOCKET, RX_data, 7);
+		// Note: RX_data starts with 3 extra bytes (W5500 register that was read) that we don't want
+		printf("\r\n\r\nnew telnet connexion from %i.%i.%i.%i\r\nserial inactive...\r\n", RX_data[3], RX_data[4], RX_data[5], RX_data[6]);
 		fflush(stdout);
 		//TX_data[0] = 0xFF; //IAC
 		//TX_data[1] = 0xFB; //WILL FB DO FD
@@ -127,13 +128,16 @@ int telnet_loop (W5500_chip* W5500) {
 	if (RX_size > 0) {
 		telnet_last_activity = GLOBAL_timer.read_us();
 		result=1;
-		W5500_read_RX_buffer(W5500, TELNET_SOCKET, RX_data, RX_size);
+		// printf("RX Size: %i\r\n", RX_size);
+		W5500_read_RX_buffer(W5500, TELNET_SOCKET, RX_data, RX_size+3);
+		// Note: RX_data starts with three extra bytes (W5500 register/block info) that are not
+		// part of the actual received data
 		RX_data[RX_size] = 0;
-		i = 0;
+		i = 3;
 		j = 0;
-		while (i < RX_size) {
+		while (i < (RX_size+3)) {
 			loc_char = (char)RX_data[i];
-			//printf("%02X %c\r\n", loc_char, loc_char);
+			// printf("%02X %c\r\n", loc_char, loc_char);
 			if ( (loc_char >= 0x20) && (loc_char <= 0x7E) ) {//displayable char
 				if ( (current_rx_line_count < 98) && (echo_ON) ) {
 					TX_data[j]=RX_data[i];
